@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""gematik-watch.
+"""gematik-watch - Sammler.
 
-Prueft woechentlich oeffentliche gematik-Quellen (Atom-Feeds sowie einzelne
-Dateien) auf Aenderungen, filtert nach Relevanz fuer eine Kostentraeger-
-Integration im E-Rezept-Umfeld und meldet Treffer als GitHub Issue.
+Prueft oeffentliche gematik-Quellen (Atom-Feeds sowie einzelne Dateien) auf
+Aenderungen, gleicht sie mit dem gespeicherten Stand ab und gibt die neuen,
+relevanten Treffer als JSON aus. Legt selbst KEIN Issue an: die verstaendliche
+Aufbereitung und die Issue-Erstellung uebernimmt woechentlich eine Claude-Routine
+(siehe README.md). Fuer einen einfachen Notlauf ohne KI: --emit-issue.
 
 Nur Standardbibliothek plus feedparser.
 
@@ -161,7 +163,7 @@ IMPACT_HINTS = {
 LOOKBACK_DAYS_FIRST_RUN = 7
 STATE_PATH = os.environ.get("GEMATIK_STATE_PATH", "state/last_seen.json")
 MAX_SEEN_PER_FEED = 300
-USER_AGENT = "gematik-watch (+https://github.com/features/actions)"
+USER_AGENT = "gematik-watch"
 HTTP_TIMEOUT = 30
 
 # ======================================================================
@@ -431,16 +433,18 @@ def sort_hits(hits: list) -> list:
     return sorted(hits, key=lambda h: (not h["deadline"], -h["weight"], -h["sort_ts"]))
 
 
-def build_issue_body(hits: list, errors: list, now: dt.datetime) -> str:
+def build_issue_body_from_result(result: dict, now: dt.datetime) -> str:
+    """Regelbasierter Issue-Text (Fallback ohne KI, nur bei --emit-issue)."""
     lines = []
     lines.append(f"Automatischer gematik-Watch-Lauf vom "
-                 f"{now.replace(microsecond=0).isoformat()}.")
+                 f"{now.replace(microsecond=0).isoformat()} (regelbasiert, ohne KI).")
     lines.append("")
-    if hits:
-        lines.append(f"**{len(hits)} relevante Aenderung(en) gefunden**, "
+    candidates = result.get("candidates", [])
+    if candidates:
+        lines.append(f"**{len(candidates)} relevante Aenderung(en) gefunden**, "
                      "sortiert nach Prioritaet (Fristen oben).")
         lines.append("")
-        for i, h in enumerate(sort_hits(hits), 1):
+        for i, h in enumerate(candidates, 1):
             flag = "⏰ FRIST " if h["deadline"] else ""
             lines.append(f"### {i}. {flag}{h['repo']} — {h['title']}")
             lines.append("")
@@ -448,29 +452,29 @@ def build_issue_body(hits: list, errors: list, now: dt.datetime) -> str:
             lines.append(f"- **Datum:** {h['date']}")
             lines.append(f"- **Link:** {h['link']}")
             lines.append(f"- **Kategorien:** {', '.join(h['categories'])}")
-            if h.get("detail"):
-                lines.append(f"- **Was sich geaendert hat:**\n\n{_indent(h['detail'])}")
+            if h.get("changed"):
+                lines.append(f"- **Was sich geaendert hat:**\n\n{_indent(h['changed'])}")
             lines.append(f"- **Auswirkung (Kostentraeger-Integration):** "
-                         f"{impact_text(h['categories'])}")
+                         f"{h['rule_based_impact']}")
             lines.append("")
     else:
         lines.append("Keine relevanten Aenderungen in diesem Lauf.")
         lines.append("")
 
-    if errors:
+    if result.get("errors"):
         lines.append("---")
         lines.append("### ⚠️ Feed-/Quellen-Fehler")
         lines.append("")
         lines.append("Folgende Quellen konnten nicht ausgewertet werden "
                      "(Lauf wurde fortgesetzt):")
         lines.append("")
-        for e in errors:
+        for e in result["errors"]:
             lines.append(f"- `{e['source']}`: {e['error']}")
         lines.append("")
 
     lines.append("---")
-    lines.append("_Erstellt von `.github/workflows/gematik-watch.yml`. "
-                 "Quellen und Filter in `scripts/watch.py` anpassbar._")
+    lines.append("_Regelbasierter Notlauf von `scripts/watch.py --emit-issue`. "
+                 "Normalfall: woechentliche Claude-Routine mit KI-Aufbereitung._")
     return "\n".join(lines)
 
 
@@ -548,14 +552,16 @@ def write_step_summary(title: str, body: str) -> None:
 
 
 # ----------------------------------------------------------------------
-# main
+# Sammeln
 # ----------------------------------------------------------------------
 
-def main() -> int:
-    now = now_utc()
-    iso = now.isocalendar()
-    week, year = iso[1], iso[0]
+def collect(now: dt.datetime) -> dict:
+    """Feeds/Dateien abrufen, mit State abgleichen, State speichern.
 
+    Legt selbst KEIN Issue an. Gibt ein Ergebnis-Objekt zurueck, das die woechentliche
+    Claude-Routine liest, verstaendlich aufbereitet und als Issue schreibt.
+    """
+    iso = now.isocalendar()
     state = load_state()
     hits: list = []
     errors: list = []
@@ -565,17 +571,59 @@ def main() -> int:
     for cfg in CONTENT_PAGES:
         hits.extend(process_content(cfg, state, errors, now))
 
-    # State immer speichern (last_run aendert sich stets) -> Workflow bleibt aktiv.
+    # State immer speichern (last_run aendert sich stets) -> Stand bleibt aktuell,
+    # es gibt jeden Lauf einen Commit.
     save_state(state)
 
-    title = f"gematik-Änderungen KW {week}"
-    body = build_issue_body(hits, errors, now)
-    write_step_summary(f"{title} ({year})", body)
+    ordered = sort_hits(hits)
+    return {
+        "run_at": now.replace(microsecond=0).isoformat(),
+        "iso_week": iso[1],
+        "iso_year": iso[0],
+        "issue_title": f"gematik-Änderungen KW {iso[1]}",
+        "candidate_count": len(ordered),
+        # bereits nach Prioritaet sortiert (Fristen zuerst)
+        "candidates": [{
+            "repo": h["repo"],
+            "kind": h["kind"],
+            "title": h["title"],
+            "date": h["date"],
+            "link": h["link"],
+            "categories": h["categories"],
+            "deadline": h["deadline"],
+            "weight": h["weight"],
+            "changed": h.get("detail", ""),
+            "rule_based_impact": impact_text(h["categories"]),
+        } for h in ordered],
+        "errors": errors,
+    }
 
-    if hits or errors:
-        create_issue(title, body)
-    else:
-        print("Keine Treffer und keine Fehler - kein Issue. State wurde aktualisiert.")
+
+# ----------------------------------------------------------------------
+# main
+# ----------------------------------------------------------------------
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    emit_issue = "--emit-issue" in argv  # mechanischer Notlauf ohne KI-Aufbereitung
+
+    now = now_utc()
+    result = collect(now)
+
+    # Kandidaten als JSON ausgeben -> die Claude-Routine liest das aus stdout.
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    if emit_issue:
+        # Fallback: regelbasiertes Issue ohne KI (z. B. wenn keine Routine laeuft).
+        hits_present = result["candidate_count"] > 0
+        if hits_present or result["errors"]:
+            title = result["issue_title"]
+            body = build_issue_body_from_result(result, now)
+            write_step_summary(f"{title} ({result['iso_year']})", body)
+            create_issue(title, body)
+        else:
+            print("Keine Treffer und keine Fehler - kein Issue. State aktualisiert.",
+                  file=sys.stderr)
 
     return 0
 
