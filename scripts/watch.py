@@ -20,13 +20,14 @@ Siehe README.md fuer Details.
 
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 import hashlib
 import json
 import os
 import re
 import sys
-import time
+import xml.etree.ElementTree as ET
 import urllib.error
 import urllib.request
 
@@ -254,22 +255,84 @@ def http_get(url: str) -> bytes:
         return resp.read()
 
 
+class _StdFeed:
+    """Minimaler feedparser-Ersatz (nur die hier genutzten Felder)."""
+
+    def __init__(self, entries):
+        self.entries = entries
+        self.bozo = 0
+
+
+def _iso_to_structtime(text: str):
+    """ISO-8601/RFC-3339 -> UTC-struct_time (wie feedparsers *_parsed)."""
+    if not text:
+        return None
+    try:
+        d = dt.datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if d.tzinfo is not None:
+        d = d.astimezone(dt.timezone.utc)
+    return d.utctimetuple()
+
+
+def parse_atom_stdlib(raw: bytes) -> _StdFeed:
+    """Atom-Feed nur mit der Standardbibliothek parsen (Fallback ohne feedparser).
+
+    Wirft ET.ParseError bei kaputtem XML; ein leerer, aber valider Feed ergibt
+    schlicht eine leere Eintragsliste.
+    """
+    root = ET.fromstring(raw)
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    entries = []
+    for e in root.findall("a:entry", ns):
+        def _txt(tag):
+            el = e.find("a:" + tag, ns)
+            return (el.text or "") if el is not None else ""
+
+        link = ""
+        for l in e.findall("a:link", ns):
+            href = l.get("href")
+            if not href:
+                continue
+            link = href
+            if l.get("rel", "alternate") == "alternate":
+                break
+        content_el = e.find("a:content", ns)
+        content = [{"value": content_el.text or ""}] if content_el is not None else []
+        entries.append({
+            "id": _txt("id"),
+            "title": _txt("title"),
+            "summary": _txt("summary"),
+            "link": link,
+            "content": content,
+            "published_parsed": _iso_to_structtime(_txt("published")),
+            "updated_parsed": _iso_to_structtime(_txt("updated")),
+        })
+    return _StdFeed(entries)
+
+
 def parse_feed(url: str):
-    """Feed laden und parsen. Wirft bei nicht verwertbarem Feed eine Exception."""
-    if feedparser is None:
-        raise RuntimeError("feedparser nicht installiert")
+    """Feed laden und parsen. Wirft bei nicht verwertbarem Feed eine Exception.
+
+    Nutzt feedparser, falls installiert; sonst den Standardbibliotheks-Fallback.
+    """
     raw = http_get(url)
-    parsed = feedparser.parse(raw)
-    if parsed.bozo and not parsed.entries:
-        raise RuntimeError(f"Feed nicht parsebar: {getattr(parsed, 'bozo_exception', '?')}")
-    return parsed
+    if feedparser is not None:
+        parsed = feedparser.parse(raw)
+        if parsed.bozo and not parsed.entries:
+            raise RuntimeError(
+                f"Feed nicht parsebar: {getattr(parsed, 'bozo_exception', '?')}")
+        return parsed
+    return parse_atom_stdlib(raw)
 
 
 def entry_datetime(entry) -> dt.datetime | None:
     for key in ("published_parsed", "updated_parsed"):
         val = entry.get(key) if hasattr(entry, "get") else getattr(entry, key, None)
         if val:
-            return dt.datetime.fromtimestamp(time.mktime(val), tz=dt.timezone.utc)
+            # feedparser wie Fallback liefern UTC-struct_time -> timegm (nicht mktime).
+            return dt.datetime.fromtimestamp(calendar.timegm(val), tz=dt.timezone.utc)
     return None
 
 
