@@ -1,0 +1,62 @@
+name: gematik-watch
+
+# Woechentliche Pruefung oeffentlicher gematik-Quellen auf relevante Aenderungen.
+# Laeuft auf GitHubs Infrastruktur (offenes Internet + GITHUB_TOKEN), da nur dort
+# die oeffentlichen gematik-Feeds erreichbar sind UND ein Issue geschrieben werden
+# kann. Die verstaendliche Aufbereitung uebernimmt Claude, sofern das Secret
+# ANTHROPIC_API_KEY hinterlegt ist; sonst wird eine regelbasierte Meldung erstellt.
+
+on:
+  schedule:
+    # Montags 04:07 UTC (nicht exakt :00, um Last-Spitzen zu vermeiden)
+    - cron: "7 4 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # State-Commit zurueck ins Repo
+  issues: write     # Issue anlegen/kommentieren
+
+concurrency:
+  group: gematik-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        run: pip install feedparser
+
+      - name: Watch ausfuehren
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # Optional: sobald dieses Secret gesetzt ist, uebernimmt Claude die
+          # Aufbereitung. Ohne Secret bleibt es bei der regelbasierten Meldung.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/watch.py
+
+      - name: State committen
+        # Laeuft auch, falls der vorige Step scheitert, damit der Stand erhalten
+        # bleibt. last_run aendert sich bei jedem Lauf -> es gibt immer einen
+        # Commit, wodurch der geplante Workflow nicht wegen Inaktivitaet
+        # deaktiviert wird.
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/last_seen.json
+          if git diff --staged --quiet; then
+            echo "Keine State-Aenderung."
+          else
+            git commit -m "chore(gematik-watch): Beobachtungsstand aktualisiert [skip ci]"
+            git push
+          fi

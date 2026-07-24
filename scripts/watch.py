@@ -3,12 +3,16 @@
 """gematik-watch - Sammler.
 
 Prueft oeffentliche gematik-Quellen (Atom-Feeds sowie einzelne Dateien) auf
-Aenderungen, gleicht sie mit dem gespeicherten Stand ab und gibt die neuen,
-relevanten Treffer als JSON aus. Legt selbst KEIN Issue an: die verstaendliche
-Aufbereitung und die Issue-Erstellung uebernimmt woechentlich eine Claude-Routine
-(siehe README.md). Fuer einen einfachen Notlauf ohne KI: --emit-issue.
+Aenderungen, gleicht sie mit dem gespeicherten Stand ab, filtert nach Relevanz
+fuer eine Kostentraeger-Integration und meldet neue Treffer als GitHub-Issue.
 
-Nur Standardbibliothek plus feedparser.
+Die verstaendliche Aufbereitung uebernimmt Claude, sofern der Repository-Secret
+ANTHROPIC_API_KEY gesetzt ist; sonst wird eine regelbasierte Fassung erstellt.
+Ausgefuehrt wird das Skript woechentlich per GitHub-Actions-Cron (siehe
+.github/workflows/gematik-watch.yml und README.md). --dry-run gibt den Text nur
+aus, ohne ein Issue anzulegen.
+
+Nur Standardbibliothek plus optional feedparser (mit stdlib-Fallback).
 
 Anpassen:
 - Quellen:  Listen FEEDS und CONTENT_PAGES weiter unten.
@@ -166,6 +170,16 @@ STATE_PATH = os.environ.get("GEMATIK_STATE_PATH", "state/last_seen.json")
 MAX_SEEN_PER_FEED = 300
 USER_AGENT = "gematik-watch"
 HTTP_TIMEOUT = 30
+
+# --- KI-Aufbereitung durch Claude (optional) -------------------------
+# Ist der Repository-Secret ANTHROPIC_API_KEY gesetzt, formuliert Claude die
+# verstaendliche Meldung. Fehlt der Schluessel oder schlaegt der Aufruf fehl,
+# wird automatisch die regelbasierte Fassung verwendet. Kein Zwang, kein Abbruch.
+AI_ENDPOINT = os.environ.get("GEMATIK_AI_ENDPOINT",
+                             "https://api.anthropic.com/v1/messages")
+AI_MODEL = os.environ.get("GEMATIK_AI_MODEL", "claude-haiku-4-5-20251001")
+AI_TIMEOUT = 90
+AI_MAX_TOKENS = 2000
 
 # ======================================================================
 # Ende Konfiguration
@@ -496,15 +510,18 @@ def sort_hits(hits: list) -> list:
     return sorted(hits, key=lambda h: (not h["deadline"], -h["weight"], -h["sort_ts"]))
 
 
-def build_issue_body_from_result(result: dict, now: dt.datetime) -> str:
-    """Regelbasierter Issue-Text (Fallback ohne KI, nur bei --emit-issue)."""
-    lines = []
-    lines.append(f"Automatischer gematik-Watch-Lauf vom "
-                 f"{now.replace(microsecond=0).isoformat()} (regelbasiert, ohne KI).")
-    lines.append("")
+def _indent(text: str) -> str:
+    return "\n".join("  " + l if l else l for l in text.splitlines())
+
+
+def build_issue_body_rulebased(result: dict, now: dt.datetime) -> str:
+    """Regelbasierter Issue-Text (ohne KI). Wird genutzt, wenn kein
+    ANTHROPIC_API_KEY gesetzt ist oder der KI-Aufruf fehlschlaegt."""
+    lines = [f"Automatischer gematik-Watch-Lauf vom "
+             f"{now.replace(microsecond=0).isoformat()} (regelbasiert, ohne KI).", ""]
     candidates = result.get("candidates", [])
     if candidates:
-        lines.append(f"**{len(candidates)} relevante Aenderung(en) gefunden**, "
+        lines.append(f"**{len(candidates)} relevante Aenderung(en)**, "
                      "sortiert nach Prioritaet (Fristen oben).")
         lines.append("")
         for i, h in enumerate(candidates, 1):
@@ -523,26 +540,89 @@ def build_issue_body_from_result(result: dict, now: dt.datetime) -> str:
     else:
         lines.append("Keine relevanten Aenderungen in diesem Lauf.")
         lines.append("")
-
-    if result.get("errors"):
-        lines.append("---")
-        lines.append("### ⚠️ Feed-/Quellen-Fehler")
-        lines.append("")
-        lines.append("Folgende Quellen konnten nicht ausgewertet werden "
-                     "(Lauf wurde fortgesetzt):")
-        lines.append("")
-        for e in result["errors"]:
-            lines.append(f"- `{e['source']}`: {e['error']}")
-        lines.append("")
-
+    lines += _errors_section(result.get("errors", []))
     lines.append("---")
-    lines.append("_Regelbasierter Notlauf von `scripts/watch.py --emit-issue`. "
-                 "Normalfall: woechentliche Claude-Routine mit KI-Aufbereitung._")
+    lines.append("_Regelbasiert. Fuer verstaendliche KI-Aufbereitung durch Claude "
+                 "einen `ANTHROPIC_API_KEY` als Repository-Secret hinterlegen._")
     return "\n".join(lines)
 
 
-def _indent(text: str) -> str:
-    return "\n".join("  " + l if l else l for l in text.splitlines())
+def _errors_section(errors: list) -> list:
+    if not errors:
+        return []
+    out = ["---", "### ⚠️ Feed-/Quellen-Fehler", "",
+           "Folgende Quellen konnten nicht ausgewertet werden "
+           "(Lauf wurde fortgesetzt):", ""]
+    out += [f"- `{e['source']}`: {e['error']}" for e in errors]
+    out.append("")
+    return out
+
+
+def ai_body_claude(result: dict, now: dt.datetime, api_key: str) -> str:
+    """Laesst Claude die Treffer verstaendlich aufbereiten (Anthropic Messages API,
+    nur Standardbibliothek). Wirft bei Fehlern -> Aufrufer faellt auf Regeln zurueck."""
+    system = (
+        "Du bist Analyst fuer die Integration von E-Rezept-Prozessen im GKV-Umfeld "
+        "aus Sicht eines Kostentraegers. Du bekommst maschinell vorgefilterte "
+        "Aenderungen aus oeffentlichen gematik-Quellen als JSON. Formuliere daraus "
+        "eine gut verstaendliche deutsche Meldung als Markdown.\n"
+        "Regeln:\n"
+        "- Pro Treffer: Was hat sich geaendert (in einfachen, klaren Worten), warum "
+        "ist es relevant (Kommunikation zwischen Verordnendem, Versichertem und "
+        "Kostentraeger; FHIR-Profile/-Versionen; Stichtage), und die konkrete "
+        "Auswirkung auf eine Kostentraeger-Integration inkl. moeglicher To-dos.\n"
+        "- Nenne Repo, Datum und den Link.\n"
+        "- Sortiere nach Prioritaet, Stichtage/Fristen ganz oben und deutlich "
+        "markiert (z. B. '⏰ FRIST').\n"
+        "- Lass Treffer weg, die bei naeherer Betrachtung irrelevant sind (reine "
+        "Tippfehler, Formatierung, Dependency-Bumps).\n"
+        "- Erfinde nichts. Nutze ausschliesslich die Angaben aus dem JSON.\n"
+        "- Antworte nur mit dem Markdown-Text der Meldung, ohne Vorrede."
+    )
+    user = ("Hier die vorgefilterten Treffer eines gematik-Watch-Laufs:\n\n"
+            + json.dumps({"issue_title": result["issue_title"],
+                          "candidates": result["candidates"],
+                          "errors": result["errors"]}, ensure_ascii=False, indent=2))
+    payload = {
+        "model": AI_MODEL,
+        "max_tokens": AI_MAX_TOKENS,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    }
+    req = urllib.request.Request(
+        AI_ENDPOINT, data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    with urllib.request.urlopen(req, timeout=AI_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    text = "".join(block.get("text", "") for block in data.get("content", [])
+                   if block.get("type") == "text").strip()
+    if not text:
+        raise RuntimeError("Leere KI-Antwort")
+    # Feed-Fehler sicherheitshalber ergaenzen, falls die KI sie ausgelassen hat.
+    if result.get("errors") and "Feed" not in text:
+        text += "\n\n" + "\n".join(_errors_section(result["errors"]))
+    return text
+
+
+def build_issue_body(result: dict, now: dt.datetime) -> str:
+    """Erzeugt den Issue-Text: mit Claude, falls ANTHROPIC_API_KEY gesetzt ist,
+    sonst regelbasiert. Ein fehlgeschlagener KI-Aufruf faellt auf Regeln zurueck."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if api_key:
+        try:
+            body = ai_body_claude(result, now, api_key)
+            return (body + "\n\n---\n_Aufbereitet von Claude "
+                    f"(`{AI_MODEL}`) via gematik-watch._")
+        except Exception as exc:  # noqa: BLE001 - KI-Fehler darf Lauf nicht stoppen
+            print(f"KI-Aufbereitung fehlgeschlagen, nutze Regel-Fallback: {exc}",
+                  file=sys.stderr)
+    return build_issue_body_rulebased(result, now)
 
 
 def _api(method: str, url: str, token: str, payload: dict | None = None):
@@ -668,26 +748,26 @@ def collect(now: dt.datetime) -> dict:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    emit_issue = "--emit-issue" in argv  # mechanischer Notlauf ohne KI-Aufbereitung
+    dry_run = "--dry-run" in argv  # nur sammeln + Text ausgeben, kein Issue
 
     now = now_utc()
-    result = collect(now)
+    result = collect(now)  # ruft Quellen ab und speichert den neuen State
 
-    # Kandidaten als JSON ausgeben -> die Claude-Routine liest das aus stdout.
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    has_output = result["candidate_count"] > 0 or bool(result["errors"])
+    if not has_output:
+        print("Keine relevanten Aenderungen und keine Fehler - kein Issue. "
+              "State wurde aktualisiert.", file=sys.stderr)
+        return 0
 
-    if emit_issue:
-        # Fallback: regelbasiertes Issue ohne KI (z. B. wenn keine Routine laeuft).
-        hits_present = result["candidate_count"] > 0
-        if hits_present or result["errors"]:
-            title = result["issue_title"]
-            body = build_issue_body_from_result(result, now)
-            write_step_summary(f"{title} ({result['iso_year']})", body)
-            create_issue(title, body)
-        else:
-            print("Keine Treffer und keine Fehler - kein Issue. State aktualisiert.",
-                  file=sys.stderr)
+    title = result["issue_title"]
+    body = build_issue_body(result, now)  # Claude, sonst regelbasiert
+    write_step_summary(f"{title} ({result['iso_year']})", body)
 
+    if dry_run:
+        print(f"=== {title} ===\n\n{body}")
+        return 0
+
+    create_issue(title, body)
     return 0
 
 
