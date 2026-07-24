@@ -1,0 +1,59 @@
+name: gematik-watch
+
+# Woechentliche Pruefung oeffentlicher gematik-Quellen auf relevante Aenderungen.
+# Treffer werden als GitHub Issue gemeldet, der Beobachtungsstand wird ins Repo
+# zurueckcommittet.
+
+on:
+  schedule:
+    # Montags 04:00 UTC
+    - cron: "0 4 * * 1"
+  workflow_dispatch: {}
+
+# Standard-GITHUB_TOKEN, keine externen Secrets noetig.
+permissions:
+  contents: write   # State-Commit zurueck ins Repo
+  issues: write     # Issue anlegen/kommentieren
+
+# Verhindert parallele Laeufe, die sich beim State-Commit in die Quere kommen.
+concurrency:
+  group: gematik-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        run: pip install feedparser
+
+      - name: Watch ausfuehren
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/watch.py
+
+      - name: State committen
+        # Laeuft auch, falls der vorige Step scheitert, damit der Stand erhalten
+        # bleibt. last_run aendert sich bei jedem Lauf -> es gibt immer einen
+        # Commit, wodurch der geplante Workflow nicht wegen Inaktivitaet
+        # deaktiviert wird.
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/last_seen.json
+          if git diff --staged --quiet; then
+            echo "Keine State-Aenderung."
+          else
+            git commit -m "chore(gematik-watch): Beobachtungsstand aktualisiert [skip ci]"
+            git push
+          fi
