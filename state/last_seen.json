@@ -1,6 +1,119 @@
 {
-  "content": {},
-  "feeds": {},
-  "last_run": null,
+  "content": {
+    "https://raw.githubusercontent.com/gematik/api-erp/master/docs/erp_fhirversion.adoc": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "relevant_lines": [
+        "= E-Rezept FHIR-Package Versionsmanagement image:gematik_logo.png[width=150, float=\"right\"]",
+        "IMPORTANT: Die Hinweise und konkreten Regelungen zu stichtagsbezogenen Versionsübergängen der gemeinsam gültigen FHIR-Profilversionen werden in separaten Verträgen zwischen den Bundesmantelvertragspartnern festgelegt.",
+        "In Abständen erfolgt eine Anpassung des Datenmodells, die der E-Rezept-Fachdienst akzeptiert und verarbeitet. Die Versionierung erfolgt aktuell auf Ebene der Datenstrukturen. Um einen Übergang für Primärsysteme und die E-Rezept-FdV zu ermöglichen erfolgen die Wechsel der Profilversionen in einem Übergang.",
+        "Die Gültigkeit einer Instanz bei der Validierung im E-Rezept-Fachdienst wird ggf. durch das darin enthaltene Datum bestimmt. In Fällen, in denen zu einem bestimmten Zeitpunkt mehrere Profilversionen gültig sind, entscheidet das Feld meta.profile, welches Package zur Validierung herangezogen wird. Weitere Details hierzu finden sich in der Anforderungsdokumentation unter folgendem Link: link:https://gemspec.gematik.de/docs/gemSpec/gemSpec_DM_eRp/gemSpec_DM_eRp_V1.9.0/#A_23384[A_23384] und im link:https://www.gkv-datenaustausch.de/leistungserbringer/apotheken/apotheken.jsp[Anhang 2 der Technischen Anlage 7 zur Arzneimittelabrechnungsvereinbarung].",
+        "| image:{AVS}[] | de.abda.eRezeptAbgabedaten| DAV-Abgabedaten | link:https://simplifier.net/eRezeptAbgabedaten[eRezeptAbgabedaten^] | link:https://www.gkv-datenaustausch.de/media/dokumente/leistungserbringer_1/apotheken/technische_anlagen_aktuell/TA7_006_20250114.pdf[Technische Anlage 7 zur Arzneimittelabrechnungsvereinbarung gemäß § 300 Absatz 3 SGB V^], Zusatz: link:https://www.gkv-datenaustausch.de/media/dokumente/leistungserbringer_1/apotheken/technische_anlagen_aktuell/TA7_Anhang_2_20250109.pdf[Anhang 2 - FHIR Versionen zur Technischen Anlage 7^]",
+        "Weitere Informationen unter link:./erp_fhirversion_change_2026-07-01.adoc[Übergang zum 01.07.2026].",
+        "Der Profilwechsel zum 01.10.2025 enthält Fehlerbehebungen und Verbesserungen, sowie ein Update der DE-Basisprofilversion, wodurch der PKV-Identifier nicht mehr unterstützt wird.",
+        "Weitere Informationen unter link:./erp_fhirversion_change_20251001.adoc[Übergang zum 01.10.2025].",
+        "| Terminologiewechsel | Terminologien | Version | Gültig ab | Gültig bis"
+      ],
+      "sha256": "eac591452d7c6118f351b39908f34271807e1176352563b2267db6c605a97146"
+    },
+    "https://raw.githubusercontent.com/gematik/fhir-profiles-erp/master/ReleaseNotes.md": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "relevant_lines": [
+        "- `Neu:` Einführung eines generischen und abstrakten Communication-Profils. Dadurch können Spezifikationen für alle Elemente zentral gepflegt werden. Bestehende Communication-Profile leiten davon ab und übernehmen die definierten Eigenschaften. Dies hat keine Auswirkungen auf Strukturen bestehender Communictaion Profile.",
+        "- `(Breaking) Geändert:` Neue Display-Werte für Flowtypes im CodeSystem `GEM_ERP_CS_FlowType`.",
+        "- `new profile` GEM_ERP_PR_Communication_DiGA, used by Health Care Provider to interact with Patient concerning DiGA Prescriptions",
+        "- `retired profile` retired GEM_ERP_PR_Communication_InfoReq as it is not allowed",
+        "- `changed` Add Must Supports in GEM_ERP_PR_Medication",
+        "### Änderungen für DiGA",
+        "- Einführen einer DiGA-MedicationDispense zur Abgabe eines Freischaltcodes für DiGAs",
+        "- Änderungen Communication_DispReq zur Zuweisung von DiGAS an Kostenträger",
+        "- Entfernen von meta.profile 1..1 für $create und $activate input Parameters",
+        "- Setzen des Identifiers für DiGA-Abgabedaten auf PZN"
+      ],
+      "sha256": "562e222385f9d50734645c582327033c3bd04feefba1431bbbd01468dbc863f6"
+    }
+  },
+  "feeds": {
+    "gematik/api-erp::commits": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "seen_ids": [
+        "tag:github.com,2008:Grit::Commit/fd269d442f35c12bef4aad319abe04d6c686c32e",
+        "tag:github.com,2008:Grit::Commit/2575afdd0ca9283beba134179dc1bde6aa1f1295",
+        "tag:github.com,2008:Grit::Commit/a3a7e9cd91d3b0a1f736bb05ad9e020dbc889021",
+        "tag:github.com,2008:Grit::Commit/88dc938d9ec8b2ceb147512d2f58e9df87d6561a",
+        "tag:github.com,2008:Grit::Commit/48f2a00a444b9b8fb0d94d961c6f0720431481c2",
+        "tag:github.com,2008:Grit::Commit/3cc7790294b18cc78695b974ea8cabd2415a9ce9",
+        "tag:github.com,2008:Grit::Commit/67e164d39b49612d723adc4f6625b5314aa81759",
+        "tag:github.com,2008:Grit::Commit/b99774e4ce2e6d45411b5481efc85afc22c89840",
+        "tag:github.com,2008:Grit::Commit/691a2fc19635c6e89708758636aacf29ea407fee",
+        "tag:github.com,2008:Grit::Commit/7c7e420ab0b2281b0fc503eaf6f1f3233bed2dbe",
+        "tag:github.com,2008:Grit::Commit/ea34a9bf9b416d003c47f2b882167dc6ca20dda9",
+        "tag:github.com,2008:Grit::Commit/e8e2a6663a359e28f20b23fe08f1558562c71a17",
+        "tag:github.com,2008:Grit::Commit/bfae3cfd35b8afade423ca1646e8efe479cbfc01",
+        "tag:github.com,2008:Grit::Commit/5ad87e54f5384a73727c80e07f63e36dd4215ecc",
+        "tag:github.com,2008:Grit::Commit/c2ac0444d4215edee616d0ed3dcca7fa21f8ae6c",
+        "tag:github.com,2008:Grit::Commit/a1acba20f98713ef18d31404e4bc5d2c59520194",
+        "tag:github.com,2008:Grit::Commit/38909ecf89149d7ec083df0ccb54fae956e997b6",
+        "tag:github.com,2008:Grit::Commit/3ab3dc5f8c68b75eb2814b6fd66b8f7112edd7cf",
+        "tag:github.com,2008:Grit::Commit/37bf64d62037e9c12956b7f55437f388cacc49e4",
+        "tag:github.com,2008:Grit::Commit/cb302af107702c9b7f38fde5039b255ffb4a8907"
+      ]
+    },
+    "gematik/api-erp::releases": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "seen_ids": [
+        "tag:github.com,2008:Repository/260182018/1.11.0",
+        "tag:github.com,2008:Repository/260182018/1.10.0",
+        "tag:github.com,2008:Repository/260182018/1.9.0",
+        "tag:github.com,2008:Repository/260182018/1.8.0",
+        "tag:github.com,2008:Repository/260182018/1.7.0",
+        "tag:github.com,2008:Repository/260182018/1.6.0",
+        "tag:github.com,2008:Repository/260182018/1.5.8",
+        "tag:github.com,2008:Repository/260182018/1.5.7",
+        "tag:github.com,2008:Repository/260182018/1.5.6",
+        "tag:github.com,2008:Repository/260182018/1.5.5"
+      ]
+    },
+    "gematik/fhir-profiles-erp::commits": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "seen_ids": [
+        "tag:github.com,2008:Grit::Commit/91386622f0e0f25b21ed8d9785611715111b20ca",
+        "tag:github.com,2008:Grit::Commit/aff18c830fba92549be308dc5545501d246f9761",
+        "tag:github.com,2008:Grit::Commit/4be516a7da491a9a59539217d0d8254830db12b1",
+        "tag:github.com,2008:Grit::Commit/20c48fba34b58f0dd4a62ea085b7bffc36151cae",
+        "tag:github.com,2008:Grit::Commit/a20f1459a20c6873f067f4eb8281a5dc16e54b28",
+        "tag:github.com,2008:Grit::Commit/70a1994f677d4a5506fc7f1947e3cbc389130257",
+        "tag:github.com,2008:Grit::Commit/1c84a590d52fc5e75e4dd49b589b14215b9d3ede",
+        "tag:github.com,2008:Grit::Commit/7997e49f6b4b85f90e211c535749279bd38bfa74",
+        "tag:github.com,2008:Grit::Commit/36b05adb9fc1512e94eae190a2cf1455bc04289c",
+        "tag:github.com,2008:Grit::Commit/c2dd7baa64d6e4d8e3a9e51df8173794e5a0edc4",
+        "tag:github.com,2008:Grit::Commit/2b28c310af427d82ba8f615eb2ee71caf3150610",
+        "tag:github.com,2008:Grit::Commit/45ab08a77461d2f7a29baa42631522a5cffbc2aa",
+        "tag:github.com,2008:Grit::Commit/6e47037bfa447218b00e0d6ccaca2bbf49d07eb8",
+        "tag:github.com,2008:Grit::Commit/a3fcd518607b4f45d0c7602535313d5c6fa16a69",
+        "tag:github.com,2008:Grit::Commit/5f4c1e9923e848d0aa8a968f0672368ec36f0160",
+        "tag:github.com,2008:Grit::Commit/de4b19a720102786263b9d29b922ba43f589cf70",
+        "tag:github.com,2008:Grit::Commit/bce28d75a016774951aa5ce5c8539d9567204f20",
+        "tag:github.com,2008:Grit::Commit/ee56177f630c5afd47b4e4bf6a22b7ebd445aab4",
+        "tag:github.com,2008:Grit::Commit/1cea77dc2dcddcccd67970c318f59d1006ad8659",
+        "tag:github.com,2008:Grit::Commit/a6509245e5cdd8d2f97e8c5288bdf541e8282a21"
+      ]
+    },
+    "gematik/fhir-profiles-erp::releases": {
+      "last_checked": "2026-07-27T07:42:26+00:00",
+      "seen_ids": [
+        "tag:github.com,2008:Repository/449741270/1.6.4",
+        "tag:github.com,2008:Repository/449741270/1.6.3",
+        "tag:github.com,2008:Repository/449741270/1.6.2",
+        "tag:github.com,2008:Repository/449741270/1.6.1",
+        "tag:github.com,2008:Repository/449741270/1.6.0",
+        "tag:github.com,2008:Repository/449741270/1.5.2",
+        "tag:github.com,2008:Repository/449741270/1.5.1",
+        "tag:github.com,2008:Repository/449741270/1.5.0",
+        "tag:github.com,2008:Repository/449741270/1.4.3",
+        "tag:github.com,2008:Repository/449741270/1.4.2"
+      ]
+    }
+  },
+  "last_run": "2026-07-27T07:42:28+00:00",
   "version": 1
 }
