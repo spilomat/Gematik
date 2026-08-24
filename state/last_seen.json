@@ -1,7 +1,7 @@
 {
   "content": {
     "https://raw.githubusercontent.com/gematik/api-erp/master/docs/erp_fhirversion.adoc": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "relevant_lines": [
         "= E-Rezept FHIR-Package Versionsmanagement image:gematik_logo.png[width=150, float=\"right\"]",
         "IMPORTANT: Die Hinweise und konkreten Regelungen zu stichtagsbezogenen Versionsübergängen der gemeinsam gültigen FHIR-Profilversionen werden in separaten Verträgen zwischen den Bundesmantelvertragspartnern festgelegt.",
@@ -16,7 +16,7 @@
       "sha256": "eac591452d7c6118f351b39908f34271807e1176352563b2267db6c605a97146"
     },
     "https://raw.githubusercontent.com/gematik/fhir-profiles-erp/master/ReleaseNotes.md": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "relevant_lines": [
         "- `Neu:` Einführung eines generischen und abstrakten Communication-Profils. Dadurch können Spezifikationen für alle Elemente zentral gepflegt werden. Bestehende Communication-Profile leiten davon ab und übernehmen die definierten Eigenschaften. Dies hat keine Auswirkungen auf Strukturen bestehender Communictaion Profile.",
         "- `(Breaking) Geändert:` Neue Display-Werte für Flowtypes im CodeSystem `GEM_ERP_CS_FlowType`.",
@@ -34,7 +34,7 @@
   },
   "feeds": {
     "gematik/api-erp::commits": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "seen_ids": [
         "tag:github.com,2008:Grit::Commit/fd269d442f35c12bef4aad319abe04d6c686c32e",
         "tag:github.com,2008:Grit::Commit/2575afdd0ca9283beba134179dc1bde6aa1f1295",
@@ -59,7 +59,7 @@
       ]
     },
     "gematik/api-erp::releases": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "seen_ids": [
         "tag:github.com,2008:Repository/260182018/1.11.0",
         "tag:github.com,2008:Repository/260182018/1.10.0",
@@ -74,7 +74,7 @@
       ]
     },
     "gematik/fhir-profiles-erp::commits": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "seen_ids": [
         "tag:github.com,2008:Grit::Commit/91386622f0e0f25b21ed8d9785611715111b20ca",
         "tag:github.com,2008:Grit::Commit/aff18c830fba92549be308dc5545501d246f9761",
@@ -99,7 +99,7 @@
       ]
     },
     "gematik/fhir-profiles-erp::releases": {
-      "last_checked": "2026-08-17T04:52:44+00:00",
+      "last_checked": "2026-08-24T04:55:06+00:00",
       "seen_ids": [
         "tag:github.com,2008:Repository/449741270/1.6.4",
         "tag:github.com,2008:Repository/449741270/1.6.3",
@@ -114,6 +114,6 @@
       ]
     }
   },
-  "last_run": "2026-08-17T04:52:46+00:00",
+  "last_run": "2026-08-24T04:55:08+00:00",
   "version": 1
 }
